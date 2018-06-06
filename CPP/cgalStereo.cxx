@@ -34,6 +34,10 @@ int main(){
         // Project points to unit sphere
         points.colwise().normalize();
 
+        // Reset the center of the sphere to origin by translating
+        Vector3d center = points.rowwise().mean();
+        points = points.colwise() - center;
+
         // Rotate all points so that the point in 0th column is along z-axis
         Vector3d c = points.col(0);
         double_t cos_t = c(2);

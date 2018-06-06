@@ -1,11 +1,16 @@
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Polyhedron_3.h>
+#include <CGAL/convex_hull_3.h>
 #include <Eigen/Dense>
 #include <vtkPolyDataReader.h>
 #include <vtkPolyDataWriter.h>
 #include <vtkPolyData.h>
-#include <vtkDelaunay2D.h>
 #include <vtkDoubleArray.h>
 #include <vtkSmartPointer.h>
 
+typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+typedef CGAL::Polyhedron_3<K> Polyhedron_3;
+typedef K::Point_3 Point;
 typedef Eigen::Vector3d Vector3d;
 typedef Eigen::VectorXd VectorXd;
 typedef Eigen::Matrix3d Matrix3d;
@@ -27,10 +32,6 @@ int main(){
         // Project points to unit sphere
         points.colwise().normalize();
 
-        // Reset the center of the sphere to origin by translating
-        Vector3d center = points.rowwise().mean();
-        points = points.colwise() - center;
-
         // Rotate all points so that the point in 0th column is along z-axis
         Vector3d c = points.col(0);
         double_t cos_t = c(2);
@@ -48,28 +49,15 @@ int main(){
         Matrix3Xd rPts(3,N);
         rPts = rotMat*points; // The points on a sphere rotated
 
-        // Calculate the stereographic projections
-        Vector3d p0;
-        Map3Xd l0( &(rPts(0,1)), 3, N-1 );
-        Matrix3Xd l(3,N-1), proj(3,N-1);
-        p0 << 0,0,-1;
-        c = rPts.col(0);
-        l = (l0.colwise() - c).colwise().normalized();
-        for( auto i=0; i < N-1; ++i ){
-            proj.col(i) = ((p0(2) - l0(2,i))/l(2,i))*l.col(i) + l0.col(i);
-            proj(i,2) = 0.0;
+        std::vector<Point> spherePoints(N);
+        for( auto i=0; i < N; ++i){
+            spherePoints[i] = Point(rPts(0,i),rPts(1,i),rPts(2,i));
         }
-        // Calculate the 2d delaunay triangulations
-        auto pts2dArr = vtkSmartPointer<vtkDoubleArray>::New();
-        pts2dArr->SetVoidArray((void*)proj.data(), 3*(N-1), 1);
-        pts2dArr->SetNumberOfComponents(3);
-        auto pts2d = vtkSmartPointer<vtkPoints>::New();
-        pts2d->SetData(pts2dArr);
-        auto poly2d = vtkSmartPointer<vtkPolyData>::New();
-        poly2d->SetPoints(pts2d);
-        auto d2d = vtkSmartPointer<vtkDelaunay2D>::New();
-        d2d->SetInputData(poly2d);
-        d2d->Update();
+
+        // Calculate the convex hull
+        Polyhedron_3 polyhedron;
+        CGAL::convex_hull_3(spherePoints.begin(),spherePoints.end(),
+                            polyhedron);
     }
     float diff((float)clock() - (float)t1);
     std::cout << "Time elapsed : " << diff / CLOCKS_PER_SEC

@@ -34,6 +34,11 @@ N = pts.shape[0]
 # Get the points on a sphere
 sphere = alg.norm( pts )
 
+# Set the center of the sphere to origin
+center = np.mean(sphere,axis=0)
+print('Center :')
+print(center)
+
 # Find the angle of sphere[0] with z-axis and rotate all points
 c = sphere[0]
 cos_t = c[2]

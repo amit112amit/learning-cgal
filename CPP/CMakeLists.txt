@@ -23,6 +23,7 @@ find_package( Boost REQUIRED )
 include( CGAL_CreateSingleSourceCGALProgram )
 
 create_single_source_cgal_program("cgalStereo.cxx")
+create_single_source_cgal_program("cgal3d.cxx")
 
 # Eigen
 
@@ -30,6 +31,9 @@ find_package( Eigen3 3.3 REQUIRED NO_MODULE )
 
 target_link_libraries( cgalStereo PRIVATE Eigen3::Eigen ${VTK_LIBRARIES})
 target_include_directories( cgalStereo PRIVATE ${VTK_INCLUDE_DIRS} )
+
+target_link_libraries( cgal3d PRIVATE Eigen3::Eigen ${VTK_LIBRARIES})
+target_include_directories( cgal3d PRIVATE ${VTK_INCLUDE_DIRS} )
 
 add_executable(vtk3d vtk3d.cxx)
 target_link_libraries( vtk3d PRIVATE Eigen3::Eigen ${VTK_LIBRARIES})
