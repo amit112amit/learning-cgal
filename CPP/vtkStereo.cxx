@@ -5,6 +5,8 @@
 #include <vtkDelaunay2D.h>
 #include <vtkDoubleArray.h>
 #include <vtkSmartPointer.h>
+#include <vtkIdFilter.h>
+#include <vtkPointData.h>
 
 typedef Eigen::Vector3d Vector3d;
 typedef Eigen::VectorXd VectorXd;
@@ -16,7 +18,7 @@ int main(){
     clock_t t1;
     t1 = clock();
     for(auto i=0; i < 10000; ++i){
-        auto reader = vtkSmartPointer<vtkPolyDataReader>::New();
+        vtkNew<vtkPolyDataReader> reader;
         reader->SetFileName("T7.vtk");
         reader->Update();
         auto poly = reader->GetOutput();
@@ -55,28 +57,42 @@ int main(){
         p0 << 0,0,-1;
         c = rPts.col(0);
         l = (l0.colwise() - c).colwise().normalized();
-        for( auto i=0; i < N-1; ++i ){
-            proj.col(i) = ((p0(2) - l0(2,i))/l(2,i))*l.col(i) + l0.col(i);
-            proj(i,2) = 0.0;
+        for( auto j=0; j < N-1; ++j ){
+            proj.col(j) = ((p0(2) - l0(2,j))/l(2,j))*l.col(j) + l0.col(j);
+            proj(j,2) = 0.0;
         }
         // Calculate the 2d delaunay triangulations
-        auto pts2dArr = vtkSmartPointer<vtkDoubleArray>::New();
+        vtkNew<vtkDoubleArray> pts2dArr;
         pts2dArr->SetVoidArray((void*)proj.data(), 3*(N-1), 1);
         pts2dArr->SetNumberOfComponents(3);
-        auto pts2d = vtkSmartPointer<vtkPoints>::New();
+        vtkNew<vtkPoints> pts2d;
         pts2d->SetData(pts2dArr);
-        auto poly2d = vtkSmartPointer<vtkPolyData>::New();
+        vtkNew<vtkPolyData> poly2d;
         poly2d->SetPoints(pts2d);
-        auto d2d = vtkSmartPointer<vtkDelaunay2D>::New();
-        d2d->SetInputData(poly2d);
+        vtkNew<vtkIdFilter> idf;
+        idf->PointIdsOn();
+        idf->SetIdsArrayName("OrigIds");
+        idf->SetInputData(poly2d);
+        vtkNew<vtkDelaunay2D> d2d;
+        d2d->SetInputConnection(idf->GetOutputPort());
         d2d->Update();
+
+        // Write the triangulation to file
+        vtkNew<vtkCellArray> final;
+        auto stereoTris = d2d->GetOutput()->GetPolys();
+        auto idArr = d2d->GetOutput()->GetPointData()->GetArray("OrigIds");
+        vtkNew<vtkIdList> idL;
+        stereoTris->InitTraversal();
+        while( stereoTris->GetNextCell(idL) ){
+            final->InsertNextCell(3);
+            for(auto j=0; j < idL->GetNumberOfIds(); ++j)
+                final->InsertCellPoint( int(
+                                        idArr->GetTuple1(idL->GetId(j))) );
+        }
+
     }
     float diff((float)clock() - (float)t1);
     std::cout << "Time elapsed : " << diff / CLOCKS_PER_SEC
               << " seconds" << std::endl;
-    //std::cout << dt.number_of_vertices() << std::endl;
-
-    //std::ofstream out("mesh.off");
-    //CGAL::export_triangulation_2_to_off( out, dt );
     return 0;
 }

@@ -1,6 +1,6 @@
 ﻿#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Delaunay_triangulation_3.h>
-#include <CGAL/Triangulation_vertex_base_with_info_3.h>
+#include <CGAL/Surface_mesh.h>
+#include <CGAL/convex_hull_3.h>
 #include <Eigen/Dense>
 #include <vtkPolyDataReader.h>
 #include <vtkPolyDataWriter.h>
@@ -10,12 +10,8 @@
 #include <vtkSmartPointer.h>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-typedef CGAL::Triangulation_vertex_base_with_info_3<unsigned,K> Vb;
-typedef CGAL::Triangulation_data_structure_3<Vb> Tds;
-typedef Tds::Vertex_handle Vertex_handle;
-typedef Tds::Cell_handle Cell_handle;
-typedef CGAL::Delaunay_triangulation_3<K, Tds> Delaunay;
-typedef Delaunay::Point Point;
+typedef K::Point_3 Point;
+typedef CGAL::Surface_mesh<Point> Surface_mesh;
 typedef Eigen::Vector3d Vector3d;
 typedef Eigen::VectorXd VectorXd;
 typedef Eigen::Matrix3d Matrix3d;
@@ -41,38 +37,19 @@ int main(){
         Vector3d center = points.rowwise().mean();
         points = points.colwise() - center;
 
-        /*
-        // Rotate all points so that the point in 0th column is along z-axis
-        Vector3d c = points.col(0);
-        double_t cos_t = c(2);
-        double_t sin_t = std::sqrt( 1 - cos_t*cos_t );
-        Vector3d axis;
-        axis << c(1), -c(0), 0.;
-        Matrix3d rotMat, axis_cross, outer;
-        axis_cross << 0. , -axis(2), axis(1),
-                        axis(2), 0., -axis(0),
-                        -axis(1), axis(0), 0.;
-
-        outer.noalias() = axis*axis.transpose();
-
-        rotMat = cos_t*Matrix3d::Identity() + sin_t*axis_cross +
-                (1-cos_t)*outer;
-        Matrix3Xd rPts(3,N);
-        rPts = rotMat*points; // The points on a sphere rotated
-        */
-
-        std::vector<std::pair<Point,unsigned>> spherePoints;
-        spherePoints.push_back(std::make_pair(Point(0.,0.,0.),N));
+        std::vector<Point> spherePoints(N);
         for( auto i=0; i < N; ++i){
-            spherePoints.push_back( std::make_pair(Point(points(0,i),
-                                                   points(1,i),
-                                                   points(2,i)),
-                                             i));
+            spherePoints[i] = Point(points(0,i),points(1,i),points(2,i));
         }
 
-        // Calculate the convex hull
-        Delaunay T(spherePoints.begin(),spherePoints.end());
+        // Make a mesh object
+        Surface_mesh sm;
 
+        // Calculate the convex hull
+        CGAL::convex_hull_3(spherePoints.begin(),
+                            spherePoints.end(), sm);
+
+        /*
         // To extract the surface
         std::vector<Cell_handle> cells;
         T.tds().incident_cells( T.infinite_vertex(),
@@ -94,6 +71,7 @@ int main(){
         writer->SetFileName("Mesh.vtk");
         writer->SetInputData(poly);
         writer->Write();
+        */
     }
     float diff((float)clock() - (float)t1);
     std::cout << "Time elapsed : " << diff / CLOCKS_PER_SEC

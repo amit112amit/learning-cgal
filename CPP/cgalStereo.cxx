@@ -1,7 +1,6 @@
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Projection_traits_xy_3.h>
 #include <CGAL/Delaunay_triangulation_2.h>
-#include <CGAL/IO/Triangulation_off_ostream_2.h>
+#include <CGAL/Triangulation_vertex_base_with_info_2.h>
 #include <Eigen/Dense>
 #include <vtkPolyDataReader.h>
 #include <vtkPolyDataWriter.h>
@@ -10,9 +9,11 @@
 #include <vtkSmartPointer.h>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-typedef CGAL::Projection_traits_xy_3<K>  Gt;
-typedef CGAL::Delaunay_triangulation_2<Gt> Delaunay;
-typedef K::Point_3 Point;
+typedef K::Point_2 Point;
+typedef CGAL::Triangulation_vertex_base_with_info_2<unsigned,K> Vb;
+typedef CGAL::Triangulation_data_structure_2<Vb> Tds;
+typedef CGAL::Delaunay_triangulation_2<K,Tds> Delaunay;
+typedef Delaunay::Face_circulator Face_circulator;
 typedef Eigen::Vector3d Vector3d;
 typedef Eigen::VectorXd VectorXd;
 typedef Eigen::Matrix3d Matrix3d;
@@ -22,7 +23,7 @@ typedef Eigen::Map<Matrix3Xd> Map3Xd;
 int main(){
     clock_t t1;
     t1 = clock();
-    for(auto i=0; i < 10000; ++i){
+    for(auto i=0; i < 1; ++i){
         auto reader = vtkSmartPointer<vtkPolyDataReader>::New();
         reader->SetFileName("T7.vtk");
         reader->Update();
@@ -55,22 +56,6 @@ int main(){
         Matrix3Xd rPts(3,N);
         rPts = rotMat*points; // The points on a sphere rotated
 
-        /*
-    // Write the rotated points to file
-    auto rPtsArr = vtkSmartPointer<vtkDoubleArray>::New();
-    auto rPtsPts = vtkSmartPointer<vtkPoints>::New();
-    auto rPtsPd = vtkSmartPointer<vtkPolyData>::New();
-    auto writer = vtkSmartPointer<vtkPolyDataWriter>::New();
-
-    rPtsArr->SetVoidArray( (void*)rPts.data(), 3*N, 1 );
-    rPtsArr->SetNumberOfComponents(3);
-    rPtsPts->SetData( rPtsArr );
-    rPtsPd->SetPoints( rPtsPts );
-    writer->SetFileName("Rotated.vtk");
-    writer->SetInputData( rPtsPd );
-    writer->Write();
-    */
-
         // Calculate the stereographic projections
         Vector3d p0;
         Map3Xd l0( &(rPts(0,1)), 3, N-1 );
@@ -78,23 +63,60 @@ int main(){
         p0 << 0,0,-1;
         c = rPts.col(0);
         l = (l0.colwise() - c).colwise().normalized();
-        for( auto i=0; i < N-1; ++i ){
-            proj.col(i) = ((p0(2) - l0(2,i))/l(2,i))*l.col(i) + l0.col(i);
+        for( auto j=0; j < N-1; ++j ){
+            proj.col(j) = ((p0(2) - l0(2,j))/l(2,j))*l.col(j) + l0.col(j);
         }
-        // Insert the projected points in a CGAL Point_3 vector
-        std::vector< Point > verts(N-1);
-        for( auto i=0; i < N-1; ++i ){
-            verts[i] = Point( proj(0,i), proj(1,i), proj(2,i) );
+        // Insert the projected points in a CGAL vertex_with_info vector
+        std::vector< std::pair< Point, unsigned> > verts;
+        for( auto j=0; j < N-1; ++j ){
+            verts.push_back(std::make_pair(Point(proj(0,j),proj(1,j)),j+1));
         }
 
         Delaunay dt( verts.begin(), verts.end() );
+
+        // Write the finite faces of the triangulation to a VTK file
+        vtkNew<vtkCellArray> triangles;
+        for( auto ffi = dt.finite_faces_begin(); ffi != dt.finite_faces_end(); ++ffi){
+            triangles->InsertNextCell(3);
+            /*
+            auto p0 = ffi->vertex(0)->point();
+            auto p1 = ffi->vertex(1)->point();
+            auto p2 = ffi->vertex(2)->point();
+            switch(CGAL::orientation(p0,p1,p2)){
+            case CGAL::LEFT_TURN:
+                break;
+            case CGAL::RIGHT_TURN:
+                break;
+            case CGAL::COLLINEAR:
+                break;
+            }
+            */
+            for(auto j=2; j >= 0; --j)
+                triangles->InsertCellPoint(ffi->vertex(j)->info());
+        }
+
+        // Iterate over infinite faces
+        Face_circulator fc = dt.incident_faces(dt.infinite_vertex()), done(fc);
+        if (fc != 0) {
+            do{
+                triangles->InsertNextCell(3);
+                for(auto j=2; j >= 0; --j){
+                    auto vh = fc->vertex(j);
+                    auto id = dt.is_infinite(vh)? 0 : vh->info();
+                    triangles->InsertCellPoint(id);
+                }
+            }while(++fc != done);
+        }
+        poly->SetPolys(triangles);
+
+        // Write to VTK file
+        vtkNew<vtkPolyDataWriter> writer;
+        writer->SetFileName("StereoMesh.vtk");
+        writer->SetInputData(poly);
+        writer->Write();
     }
     float diff((float)clock() - (float)t1);
     std::cout << "Time elapsed : " << diff / CLOCKS_PER_SEC
               << " seconds" << std::endl;
-    //std::cout << dt.number_of_vertices() << std::endl;
-
-    //std::ofstream out("mesh.off");
-    //CGAL::export_triangulation_2_to_off( out, dt );
     return 0;
 }

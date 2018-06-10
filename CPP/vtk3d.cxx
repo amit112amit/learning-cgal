@@ -20,7 +20,7 @@ int main(){
     clock_t t1;
     t1 = clock();
     for(auto i=0; i < 10000; ++i){
-        auto reader = vtkSmartPointer<vtkPolyDataReader>::New();
+        vtkNew<vtkPolyDataReader> reader;
         reader->SetFileName("T7.vtk");
         reader->Update();
         auto poly = reader->GetOutput();
@@ -57,14 +57,13 @@ int main(){
             }
         }
         poly->SetPolys(finalCells);
+        auto writer = vtkSmartPointer<vtkPolyDataWriter>::New();
+        writer->SetFileName("Mesh.vtk");
+        writer->SetInputData(poly);
+        writer->Write();
+
     }
 
-    /*
-    auto writer = vtkSmartPointer<vtkPolyDataWriter>::New();
-    writer->SetFileName("Mesh.vtk");
-    writer->SetInputData(dssf->GetOutput());
-    writer->Write();
-    */
     float diff((float)clock() - (float)t1);
     std::cout << "Time elapsed : " << diff / CLOCKS_PER_SEC
               << " seconds" << std::endl;
