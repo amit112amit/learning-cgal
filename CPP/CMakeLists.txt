@@ -22,13 +22,14 @@ find_package( Boost REQUIRED )
 find_package( Eigen3 3.3 REQUIRED NO_MODULE )
 
 add_executable(cgalStereo cgalStereo.cxx)
+add_executable(cgalData cgalData.cxx)
 add_executable(cgal3d cgal3d.cxx)
 add_executable(cgal3dCH cgal3dCH.cxx)
 add_executable(vtk3d vtk3d.cxx)
 add_executable(vtk2d vtkStereo.cxx)
-add_executable(cgalAngular cgalAngular.cxx)
+add_executable(simple simple.cxx)
 
-set( programs cgalStereo cgal3d cgal3dCH vtk3d vtk2d cgalAngular )
+set( programs cgalStereo cgal3d cgal3dCH vtk3d vtk2d cgalData )
 
 foreach(program ${programs})
         target_link_libraries( ${program} PRIVATE Eigen3::Eigen ${VTK_LIBRARIES} ${CGAL_LIBRARIES})

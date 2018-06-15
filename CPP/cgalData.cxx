@@ -7,6 +7,7 @@
 #include <vtkPolyData.h>
 #include <vtkDoubleArray.h>
 #include <vtkSmartPointer.h>
+#include <functional>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef K::Point_2 Point;
@@ -20,10 +21,18 @@ typedef Eigen::Matrix3d Matrix3d;
 typedef Eigen::Matrix3Xd Matrix3Xd;
 typedef Eigen::Map<Matrix3Xd> Map3Xd;
 
+// New structure to store first ring neighbors of a vertex
+struct vertex_first_ring{
+    size_t vertex_id;
+    std::vector< std::pair<unsigned,unsigned> > faces;
+    std::vector< unsigned > edges;
+};
+
 int main(){
     clock_t t1;
     t1 = clock();
     for(auto i=0; i < 1; ++i){
+        // *************************** Triangulation *************************//
         auto reader = vtkSmartPointer<vtkPolyDataReader>::New();
         reader->SetFileName("T7.vtk");
         reader->Update();
@@ -68,9 +77,8 @@ int main(){
         }
         // Insert the projected points in a CGAL vertex_with_info vector
         std::vector< std::pair< Point, unsigned> > verts;
-        for( auto j=0; j < N-1; ++j ){
+        for( auto j=0; j < N-1; ++j )
             verts.push_back(std::make_pair(Point(proj(0,j),proj(1,j)),j+1));
-        }
 
         Delaunay dt( verts.begin(), verts.end() );
 
@@ -83,7 +91,7 @@ int main(){
         }
 
         // Iterate over infinite faces
-        Face_circulator fc = dt.incident_faces(dt.infinite_vertex()), done(fc);
+        Face_circulator fc = dt.incident_faces(dt.infinite_vertex()), done3(fc);
         if (fc != 0) {
             do{
                 triangles->InsertNextCell(3);
@@ -92,15 +100,89 @@ int main(){
                     auto id = dt.is_infinite(vh)? 0 : vh->info();
                     triangles->InsertCellPoint(id);
                 }
-            }while(++fc != done);
+            }while(++fc != done3);
         }
         poly->SetPolys(triangles);
 
         // Write to VTK file
         vtkNew<vtkPolyDataWriter> writer;
-        writer->SetFileName("StereoMesh.vtk");
+        writer->SetFileName("CGALStereoMesh.vtk");
         writer->SetInputData(poly);
         writer->Write();
+
+        // *************************** Our data structure *************************//
+        std::vector<vertex_first_ring> first_ring;
+        std::set<std::set<unsigned>> tri, edges;
+
+        // Iterate over all vertices and collect first ring neighbors
+        for(auto fvi = dt.all_vertices_begin(); fvi != dt.all_vertices_end(); ++fvi){
+
+            vertex_first_ring vfr;
+            std::vector<Delaunay::Vertex_handle> rvh;
+            auto vid = dt.is_infinite(fvi)? 0 : fvi->info();
+            vfr.vertex_id = vid;
+            Delaunay::Edge_circulator ec = dt.incident_edges(fvi), done(ec);
+
+            // Lambda function to get the vertex id for the edge
+            auto getVertexId = [](int a, int b){
+                std::set<int> index{0,1,2};
+                index.erase(a);
+                index.erase(b);
+                return *index.begin();
+            };
+
+            if( ec != 0){
+                do{
+
+                    auto fh = ec->first;
+                    auto edgeIndex = getVertexId(fh->index(fvi),ec->second);
+                    auto verH = fh->vertex(edgeIndex);
+                    auto edgeId = dt.is_infinite(verH)? 0 : verH->info();
+                    std::set<unsigned> edge{vid,edgeId};
+                    auto tryInsertEdge = edges.insert(edge);
+                    if(tryInsertEdge.second){
+                        vfr.edges.push_back(edgeId);
+                        rvh.push_back(verH);
+                    }
+
+                }while(++ec != done);
+            }
+
+            // Check which edges form a unique face
+            auto numEdges = rvh.size();
+            for( auto k = 0; k < numEdges; ++k){
+                auto next = (k+1) % numEdges;
+                // Check if face is formed
+                if(dt.is_face(fvi,rvh[k],rvh[next] )){
+                    // Check if face is unique
+                    std::set<unsigned> face{vid,vfr.edges[k],vfr.edges[next]};
+                    auto tryInsertFace = tri.insert(face);
+                    if(tryInsertFace.second)
+                        vfr.faces.push_back(std::make_pair(k,next));
+                }
+            }
+
+            first_ring.push_back(vfr);
+        }
+
+        //*************************** Print first ring ******************************//
+        auto edgeNum = 0;
+        auto faceNum = 0;
+        for( const auto & vfr : first_ring){
+            std::cout<<" Center Point = " << vfr.vertex_id << std::endl;
+            std::cout<<"\t Faces = "<< std::endl;
+            for(const auto & face : vfr.faces){
+                std::cout<<"\t\t"<< face.first << " " << face.second << std::endl;
+                faceNum++;
+            }
+            std::cout<<"\t Edges = "<< std::endl;
+            for(const auto & edge : vfr.edges){
+                std::cout<<"\t\t"<< edge << std::endl;
+                edgeNum++;
+            }
+        }
+        std::cout<< "Number of faces = " << faceNum << std::endl;
+        std::cout<< "Number of edges = " << edgeNum << std::endl;
     }
     float diff((float)clock() - (float)t1);
     std::cout << "Time elapsed : " << diff / CLOCKS_PER_SEC
