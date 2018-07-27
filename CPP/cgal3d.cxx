@@ -31,7 +31,7 @@ int main(){
         reader->Update();
         auto poly = reader->GetOutput();
         auto N = poly->GetNumberOfPoints();
-        auto pts = (double*) poly->GetPoints()->GetData()->GetVoidPointer(0);
+        auto pts = static_cast<double_t*>(poly->GetPoints()->GetData()->GetVoidPointer(0));
         Map3Xd points(pts,3,N);
 
         // Project points to unit sphere
@@ -41,7 +41,6 @@ int main(){
         Vector3d center = points.rowwise().mean();
         points = points.colwise() - center;
 
-        /*
         // Rotate all points so that the point in 0th column is along z-axis
         Vector3d c = points.col(0);
         double_t cos_t = c(2);
@@ -59,7 +58,7 @@ int main(){
                 (1-cos_t)*outer;
         Matrix3Xd rPts(3,N);
         rPts = rotMat*points; // The points on a sphere rotated
-        */
+	points = rPts;
 
         std::vector<std::pair<Point,unsigned>> spherePoints;
         spherePoints.push_back(std::make_pair(Point(0.,0.,0.),N));
@@ -82,7 +81,7 @@ int main(){
         vtkNew<vtkCellArray> triangles;
         for( auto c : cells ){
             auto infv = c->index(T.infinite_vertex());
-            triangles->InsertNextCell(3);
+            //triangles->InsertNextCell(3);
             for( auto j=0; j < 4; ++j){
                 if (j == infv)
                     continue;
@@ -95,7 +94,7 @@ int main(){
         writer->SetInputData(poly);
         writer->Write();
     }
-    float diff((float)clock() - (float)t1);
+    float diff(static_cast<float>(clock()) - static_cast<float>(t1));
     std::cout << "Time elapsed : " << diff / CLOCKS_PER_SEC
               << " seconds" << std::endl;
     return 0;

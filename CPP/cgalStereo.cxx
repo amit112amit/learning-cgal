@@ -23,9 +23,9 @@ typedef Eigen::Map<Matrix3Xd> Map3Xd;
 int main(){
     clock_t t1;
     t1 = clock();
-    for(auto i=0; i < 1; ++i){
+    for(auto i=0; i < 10000; ++i){
         auto reader = vtkSmartPointer<vtkPolyDataReader>::New();
-        reader->SetFileName("T7.vtk");
+        reader->SetFileName("Bad.vtk");
         reader->Update();
         auto poly = reader->GetOutput();
         auto N = poly->GetNumberOfPoints();
